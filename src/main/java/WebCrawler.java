@@ -1,6 +1,8 @@
 import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -10,6 +12,7 @@ import java.util.concurrent.RecursiveTask;
 
 public class WebCrawler extends RecursiveTask<Boolean> {
     public static int DEFAULT_MAX_DEPTH = 10;
+    private static final Logger logger = LoggerFactory.getLogger(WebCrawler.class);
 
     final private int depthRemaining;
     final private String url;
@@ -40,7 +43,7 @@ public class WebCrawler extends RecursiveTask<Boolean> {
             return true;
 
         } catch (URISyntaxException e) {
-            System.out.println("Invalid URL: " + url);
+            logger.warn("Invalid URL in web crawler: {}", url);
             return true;
         }
     }
@@ -52,7 +55,7 @@ public class WebCrawler extends RecursiveTask<Boolean> {
 
         if (doc != null) {
             int updatedDepthRemaining = depthRemaining - 1;
-            //System.out.println("Current Depth: " + (DEFAULT_MAX_DEPTH - updatedDepthRemaining));
+            logger.trace("Current Depth: {}", DEFAULT_MAX_DEPTH - updatedDepthRemaining);
 
             Elements links = doc.select("a[href]");
             for (Element link : links) {
@@ -63,7 +66,7 @@ public class WebCrawler extends RecursiveTask<Boolean> {
                         nestedWebCrawlers.add(new WebCrawler(updatedDepthRemaining, nestedUrl, rootDomain, pages));
                     }
                 } catch (URISyntaxException e) {
-                    //System.out.println("Ignoring invalid nested URL: " + nestedUrl);
+                    logger.debug("Ignoring invalid nested URL: {}", nestedUrl);
                 }
 
             }
