@@ -1,77 +1,40 @@
-import org.jsoup.nodes.Document;
-import org.jsoup.nodes.Element;
-import org.jsoup.select.Elements;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.net.URISyntaxException;
-import java.util.ArrayList;
-import java.util.Set;
-import java.util.concurrent.ForkJoinTask;
-import java.util.concurrent.RecursiveTask;
+import java.util.*;
+import java.util.concurrent.ForkJoinPool;
 
-public class WebCrawler extends RecursiveTask<Boolean> {
-    public static int DEFAULT_MAX_DEPTH = 10;
-    private static final Logger logger = LoggerFactory.getLogger(WebCrawler.class);
+public class WebCrawler {
+    private static final int DEFAULT_MAX_DEPTH = 10;
+    private static final ForkJoinPool forkJoinPool = ForkJoinPool.commonPool();
 
-    final private int depthRemaining;
-    final private String url;
-    final private String rootDomain;
-    final private Set<String> pages;
-
-    public WebCrawler(int depthRemaining, String url, String rootDomain, Set<String> pages) {
-        this.depthRemaining = depthRemaining;
-        this.url = url;
-        this.rootDomain = rootDomain;
-        this.pages = pages;
-    }
-
-    @Override
-    protected Boolean compute() {
+    public static void crawl(int maxDepth, String inputUrl) {
         try {
-            String strippedUrl = UriUtil.stripUrl(url);
+            String strippedUrl = UriUtil.stripUrl(inputUrl);
+            String rootDomain = UriUtil.getUrlDomain(strippedUrl);
 
-            boolean isPageAbsent = pages.add(strippedUrl);
+            System.out.println("Crawling pages for Domain [" + rootDomain + "] from Input URL [" + inputUrl + "] provided...");
 
-            if (!isPageAbsent || depthRemaining <= 0) return true;
+            Set<String> allPages = Collections.synchronizedSet(new HashSet<>());
 
-            ArrayList<WebCrawler> nestedWebCrawlers = createNestedCrawlers(strippedUrl);
+            RecursiveCrawler recursiveCrawler = new RecursiveCrawler(1, strippedUrl, maxDepth, rootDomain, allPages);
+            forkJoinPool.invoke(recursiveCrawler);
 
-            nestedWebCrawlers.forEach(ForkJoinTask::fork);
-            nestedWebCrawlers.forEach(ForkJoinTask::join);
-
-            return true;
-
+            // Sort all pages found and then print to screen
+            Set<String> sortedPages = new TreeSet<>(allPages);
+            System.out.println("####################################################################################################");
+            System.out.println("List of all pages found in Domain [" + rootDomain + "]:");
+            for (String pageUrl : sortedPages) {
+                System.out.println(pageUrl);
+            }
+            System.out.println("####################################################################################################");
         } catch (URISyntaxException e) {
-            logger.warn("Invalid URL in web crawler: {}", url);
-            return true;
+            System.out.println("Invalid URL: " + inputUrl);
         }
+
+
     }
 
-    private ArrayList<WebCrawler> createNestedCrawlers(String strippedUrl) {
-        ArrayList<WebCrawler> nestedWebCrawlers = new ArrayList<>();
-
-        Document doc = UriUtil.requestPage(strippedUrl);
-
-        if (doc != null) {
-            int updatedDepthRemaining = depthRemaining - 1;
-            logger.trace("Current Depth: {}", DEFAULT_MAX_DEPTH - updatedDepthRemaining);
-
-            Elements links = doc.select("a[href]");
-            for (Element link : links) {
-                String nestedUrl = link.absUrl("href");
-                try {
-                    String nestedUrlDomain = UriUtil.getUrlDomain(nestedUrl);
-                    if (nestedUrlDomain.equals(rootDomain)) {
-                        nestedWebCrawlers.add(new WebCrawler(updatedDepthRemaining, nestedUrl, rootDomain, pages));
-                    }
-                } catch (URISyntaxException e) {
-                    logger.debug("Ignoring invalid nested URL: {}", nestedUrl);
-                }
-
-            }
-        }
-
-        return nestedWebCrawlers;
+    public static void crawl(String inputUrl) {
+        crawl(DEFAULT_MAX_DEPTH, inputUrl);
     }
 }
